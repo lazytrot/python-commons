@@ -1,0 +1,44 @@
+[build-system]
+requires = ["setuptools>=61.0"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "internal-base"
+version = "0.1.0"
+authors = [
+  { name="Python Commons Team", email="admin@lazytrot.dev" },
+]
+description = "Core utilities and foundational code for cloud-deployed microservices"
+requires-python = ">=3.11"
+dependencies = [
+    # Logging
+    "python-json-logger>=2.0.7",
+    "coloredlogs>=15.0.1",
+
+    # Settings and configuration
+    "pydantic>=2.0",
+    "pydantic-settings>=2.0.0",
+    "pydantic-settings-extra-sources>=0.1.0",
+    "pyyaml>=6.0",
+
+    # Telemetry
+    "opentelemetry-api>=1.20.0",
+    "opentelemetry-sdk>=1.20.0",
+    "opentelemetry-instrumentation>=0.41b0",
+
+    # Resilience
+    "tenacity>=8.0.0",
+    "pybreaker>=1.0.0",
+]
+classifiers = [
+    "Programming Language :: Python :: 3",
+    "Operating System :: OS Independent",
+]
+
+[tool.setuptools]
+py-modules = []
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["internal_base*"]
+exclude = ["tests*"]

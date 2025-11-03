@@ -1,0 +1,29 @@
+[build-system]
+requires = ["setuptools>=61.0"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "internal-rdbms"
+version = "0.1.0"
+authors = [
+  { name="Claude", email="claude@anthropic.com" },
+]
+description = "Components for working with relational database management systems."
+requires-python = ">=3.8"
+classifiers = [
+    "Programming Language :: Python :: 3",
+    "Operating System :: OS Independent",
+]
+dependencies = [
+    "internal-base",
+    "sqlalchemy[asyncio]>=2.0",
+    "asyncpg>=0.29.0",  # PostgreSQL async driver
+    "aiomysql>=0.2.0",  # MySQL async driver
+    "aiosqlite>=0.19.0",  # SQLite async driver
+    "pydantic>=2.0",
+]
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["internal_rdbms*"]
+exclude = ["tests*"]
