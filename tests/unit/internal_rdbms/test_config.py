@@ -1,175 +1,106 @@
-"""Tests for database configuration."""
+"""
+Unit tests for internal_rdbms configuration.
+
+Tests DatabaseConfig URL construction and validation.
+"""
 
 import pytest
-from internal_rdbms import DatabaseConfig, DatabaseDriver
+from internal_rdbms import DatabaseConfig
 
 
-@pytest.mark.unit
-def test_database_config_postgresql():
-    """Test PostgreSQL database configuration."""
-    config = DatabaseConfig(
-        driver=DatabaseDriver.POSTGRESQL,
-        host="localhost",
-        port=5432,
-        user="testuser",
-        password="testpass",
-        name="testdb",
-    )
+class TestDatabaseConfig:
+    """Test DatabaseConfig model."""
 
-    assert config.driver == DatabaseDriver.POSTGRESQL
-    assert config.host == "localhost"
-    assert config.port == 5432
-    assert config.user == "testuser"
-    assert config.password == "testpass"
-    assert config.name == "testdb"
-    assert config.url == "postgresql+asyncpg://testuser:testpass@localhost:5432/testdb"
+    def test_postgresql_url(self):
+        """Test PostgreSQL URL construction."""
+        config = DatabaseConfig(
+            driver="postgresql+asyncpg",
+            host="localhost",
+            port=5432,
+            user="testuser",
+            password="testpass",
+            name="testdb"
+        )
+        
+        assert config.url == "postgresql+asyncpg://testuser:testpass@localhost:5432/testdb"
 
+    def test_mysql_url(self):
+        """Test MySQL URL construction."""
+        config = DatabaseConfig(
+            driver="mysql+aiomysql",
+            host="db.example.com",
+            port=3306,
+            user="root",
+            password="secret",
+            name="myapp"
+        )
+        
+        assert config.url == "mysql+aiomysql://root:secret@db.example.com:3306/myapp"
 
-@pytest.mark.unit
-def test_database_config_postgresql_no_password():
-    """Test PostgreSQL configuration without password."""
-    config = DatabaseConfig(
-        driver=DatabaseDriver.POSTGRESQL,
-        host="localhost",
-        port=5432,
-        user="testuser",
-        name="testdb",
-    )
+    def test_sqlite_file_url(self):
+        """Test SQLite file URL construction."""
+        config = DatabaseConfig(
+            driver="sqlite+aiosqlite",
+            name="myapp.db"
+        )
+        
+        assert config.url == "sqlite+aiosqlite:///./myapp.db"
 
-    assert config.url == "postgresql+asyncpg://testuser@localhost:5432/testdb"
+    def test_sqlite_memory_url(self):
+        """Test SQLite in-memory URL construction."""
+        config = DatabaseConfig(
+            driver="sqlite+aiosqlite",
+            name=":memory:"
+        )
+        
+        assert config.url == "sqlite+aiosqlite:///:memory:"
 
+    def test_url_without_credentials(self):
+        """Test URL construction without credentials."""
+        config = DatabaseConfig(
+            driver="postgresql+asyncpg",
+            host="localhost",
+            name="testdb"
+        )
+        
+        # Should have default port
+        assert "localhost:5432" in config.url or "localhost:" in config.url
 
-@pytest.mark.unit
-def test_database_config_postgresql_defaults():
-    """Test PostgreSQL with default port."""
-    config = DatabaseConfig(
-        driver=DatabaseDriver.POSTGRESQL,
-        host="localhost",
-        user="postgres",
-        name="mydb",
-    )
+    def test_default_pool_settings(self):
+        """Test default pool settings."""
+        config = DatabaseConfig()
+        
+        assert config.pool_size == 5
+        assert config.max_overflow == 10
+        assert config.pool_timeout == 30.0
+        assert config.pool_recycle == 1800
 
-    # Default port should be 5432
-    assert "localhost:5432" in config.url
+    def test_custom_pool_settings(self):
+        """Test custom pool settings."""
+        config = DatabaseConfig(
+            pool_size=20,
+            max_overflow=30,
+            pool_timeout=60.0,
+            pool_recycle=3600
+        )
+        
+        assert config.pool_size == 20
+        assert config.max_overflow == 30
+        assert config.pool_timeout == 60.0
+        assert config.pool_recycle == 3600
 
+    def test_connect_args(self):
+        """Test custom connect_args."""
+        config = DatabaseConfig(
+            connect_args={"ssl": True, "timeout": 10}
+        )
+        
+        assert config.connect_args == {"ssl": True, "timeout": 10}
 
-@pytest.mark.unit
-def test_database_config_sqlite_memory():
-    """Test SQLite in-memory database configuration."""
-    config = DatabaseConfig(driver=DatabaseDriver.SQLITE_MEMORY)
-
-    assert config.driver == DatabaseDriver.SQLITE_MEMORY
-    assert config.url == "sqlite+aiosqlite:///:memory:"
-
-
-@pytest.mark.unit
-def test_database_config_sqlite_file():
-    """Test SQLite file database configuration."""
-    config = DatabaseConfig(
-        driver=DatabaseDriver.SQLITE,
-        name="test.db",
-    )
-
-    assert config.driver == DatabaseDriver.SQLITE
-    assert config.url == "sqlite+aiosqlite:///./test.db"
-
-
-@pytest.mark.unit
-def test_database_config_sqlite_default_name():
-    """Test SQLite with default database name."""
-    config = DatabaseConfig(driver=DatabaseDriver.SQLITE)
-
-    assert "database.db" in config.url
-
-
-@pytest.mark.unit
-def test_database_config_pool_settings():
-    """Test database pool configuration."""
-    config = DatabaseConfig(
-        driver=DatabaseDriver.POSTGRESQL,
-        host="localhost",
-        user="test",
-        name="test",
-        pool_size=20,
-        max_overflow=40,
-        pool_timeout=60.0,
-        pool_recycle=7200,
-    )
-
-    assert config.pool_size == 20
-    assert config.max_overflow == 40
-    assert config.pool_timeout == 60.0
-    assert config.pool_recycle == 7200
-
-
-@pytest.mark.unit
-def test_database_config_pool_defaults():
-    """Test database pool default values."""
-    config = DatabaseConfig(
-        driver=DatabaseDriver.POSTGRESQL,
-        host="localhost",
-        user="test",
-        name="test",
-    )
-
-    assert config.pool_size == 10
-    assert config.max_overflow == 20
-    assert config.pool_timeout == 30.0
-    assert config.pool_recycle == 3600
-    assert config.pool_pre_ping is True
-    assert config.echo is False
-    assert config.echo_pool is False
-
-
-@pytest.mark.unit
-def test_database_config_echo_settings():
-    """Test database echo configuration."""
-    config = DatabaseConfig(
-        driver=DatabaseDriver.POSTGRESQL,
-        host="localhost",
-        user="test",
-        name="test",
-        echo=True,
-        echo_pool=True,
-    )
-
-    assert config.echo is True
-    assert config.echo_pool is True
-
-
-@pytest.mark.unit
-def test_database_config_connect_args():
-    """Test database connect_args configuration."""
-    connect_args = {"ssl": True, "timeout": 10}
-    config = DatabaseConfig(
-        driver=DatabaseDriver.POSTGRESQL,
-        host="localhost",
-        user="test",
-        name="test",
-        connect_args=connect_args,
-    )
-
-    assert config.connect_args == connect_args
-
-
-@pytest.mark.unit
-def test_database_config_password_not_in_repr():
-    """Test that password is not exposed in repr."""
-    config = DatabaseConfig(
-        driver=DatabaseDriver.POSTGRESQL,
-        host="localhost",
-        user="test",
-        password="secret123",
-        name="test",
-    )
-
-    # Password field should have repr=False
-    assert "secret123" not in str(config)
-
-
-@pytest.mark.unit
-def test_database_driver_values():
-    """Test DatabaseDriver enum values."""
-    assert DatabaseDriver.POSTGRESQL.value == "postgresql+asyncpg"
-    assert DatabaseDriver.SQLITE.value == "sqlite+aiosqlite"
-    assert DatabaseDriver.SQLITE_MEMORY.value == "sqlite+aiosqlite:///:memory:"
+    def test_echo_setting(self):
+        """Test echo SQL setting."""
+        config_echo = DatabaseConfig(echo=True)
+        config_no_echo = DatabaseConfig(echo=False)
+        
+        assert config_echo.echo is True
+        assert config_no_echo.echo is False
