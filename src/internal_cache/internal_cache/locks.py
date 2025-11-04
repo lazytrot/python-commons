@@ -209,7 +209,7 @@ class DistributedLock:
         acquired = await self.acquire()
         if not acquired:
             raise RuntimeError(f"Failed to acquire lock: {self.lock_name}")
-        return self
+        return acquired
 
     async def __aexit__(self, exc_type, exc_val, exc_tb):
         """Context manager exit."""

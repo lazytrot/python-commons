@@ -99,25 +99,27 @@ async def s3_client(s3_config, aws_credentials):
 async def dynamodb_table(dynamodb_config, aws_credentials):
     """DynamoDB table connected to LocalStack."""
     from pydantic import BaseModel
-    
-    class TestItem(BaseModel):
-        id: str
+
+    class UserModel(BaseModel):
+        user_id: str
         name: str
-    
+        email: str
+        age: int = 0
+
     table = DynamoTable(
         dynamodb_config,
-        TestItem,
+        UserModel,
         aws_credentials,
-        key_schema=[{"AttributeName": "id", "KeyType": "HASH"}],
-        attribute_definitions=[{"AttributeName": "id", "AttributeType": "S"}]
+        key_schema=[{"AttributeName": "user_id", "KeyType": "HASH"}],
+        attribute_definitions=[{"AttributeName": "user_id", "AttributeType": "S"}]
     )
-    
+
     # Create table
     try:
         await table.create_table()
     except Exception:
         pass  # Table might already exist
-    
+
     yield table
 
 

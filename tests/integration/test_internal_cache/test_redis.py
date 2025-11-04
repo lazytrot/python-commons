@@ -194,12 +194,12 @@ async def test_distributed_lock_context_manager(redis_client):
         assert acquired is True
 
         # Lock should be held
-        # Try to check if key exists
-        exists = await redis_client.exists("test:lock:ctx")
+        # DistributedLock prepends "lock:" to the lock_name
+        exists = await redis_client.exists("lock:test:lock:ctx")
         assert exists > 0
 
     # Lock should be released after context
-    exists_after = await redis_client.exists("test:lock:ctx")
+    exists_after = await redis_client.exists("lock:test:lock:ctx")
     assert exists_after == 0
 
 
