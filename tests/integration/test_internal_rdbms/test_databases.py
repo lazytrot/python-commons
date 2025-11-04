@@ -7,7 +7,7 @@ NO MOCKING - uses testcontainers for real databases.
 
 import pytest
 from sqlalchemy import select
-from tests.integration.internal_rdbms.conftest import User
+from tests.integration.test_internal_rdbms.conftest import User
 
 
 @pytest.mark.integration

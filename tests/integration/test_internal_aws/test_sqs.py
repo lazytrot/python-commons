@@ -9,7 +9,7 @@ import asyncio
 from pydantic import BaseModel
 
 
-class TestMessage(BaseModel):
+class MessageModel(BaseModel):
     """Test message model."""
     id: str
     content: str
@@ -50,7 +50,7 @@ class TestSQSClient:
 
     async def test_send_pydantic_model(self, sqs_client):
         """Test sending Pydantic model."""
-        msg = TestMessage(id="123", content="Test content")
+        msg = MessageModel(id="123", content="Test content")
         
         response = await sqs_client.send_message(msg)
         assert "MessageId" in response

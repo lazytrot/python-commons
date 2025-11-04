@@ -8,7 +8,7 @@ import pytest
 from pydantic import BaseModel
 
 
-class TestData(BaseModel):
+class DataModel(BaseModel):
     """Test model for S3."""
     id: str
     value: str
@@ -52,7 +52,7 @@ class TestS3Client:
 
     async def test_put_and_get_model(self, s3_client):
         """Test Pydantic model operations."""
-        test_data = TestData(id="123", value="test")
+        test_data = DataModel(id="123", value="test")
         
         await s3_client.put_object(
             "model.json",
@@ -60,7 +60,7 @@ class TestS3Client:
             content_type="application/json"
         )
         
-        retrieved = await s3_client.get_object_as_model("model.json", TestData)
+        retrieved = await s3_client.get_object_as_model("model.json", DataModel)
         assert retrieved.id == "123"
         assert retrieved.value == "test"
 

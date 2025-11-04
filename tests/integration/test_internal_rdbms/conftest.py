@@ -25,8 +25,12 @@ class User(Base):
 @pytest.fixture(scope="session")
 def postgres_container():
     """Start PostgreSQL container."""
-    with PostgresContainer("postgres:15-alpine") as postgres:
-        yield postgres
+    postgres = PostgresContainer("postgres:15-alpine")
+    postgres.start()
+
+    yield postgres
+
+    postgres.stop()
 
 
 @pytest.fixture
@@ -45,8 +49,12 @@ def postgres_config(postgres_container):
 @pytest.fixture(scope="session")
 def mysql_container():
     """Start MySQL container."""
-    with MySqlContainer("mysql:8.0") as mysql:
-        yield mysql
+    mysql = MySqlContainer("mysql:8.0")
+    mysql.start()
+
+    yield mysql
+
+    mysql.stop()
 
 
 @pytest.fixture

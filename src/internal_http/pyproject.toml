@@ -21,3 +21,11 @@ dev = [
     "pytest-cov>=4.1.0",
     "testcontainers>=3.7.1",
 ]
+
+[tool.setuptools]
+py-modules = []
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["internal_http*"]
+exclude = ["tests*"]

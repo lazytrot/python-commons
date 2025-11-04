@@ -8,7 +8,7 @@ import pytest
 from pydantic import BaseModel
 
 
-class TestUser(BaseModel):
+class UserModel(BaseModel):
     """Test model for DynamoDB."""
     user_id: str
     name: str
@@ -25,7 +25,7 @@ class TestDynamoTable:
     async def test_put_and_get_item(self, dynamodb_table):
         """Test putting and getting item."""
         # Put item
-        user = TestUser(user_id="123", name="John Doe", email="john@example.com", age=30)
+        user = UserModel(user_id="123", name="John Doe", email="john@example.com", age=30)
         await dynamodb_table.put_item(user)
         
         # Get item
@@ -54,7 +54,7 @@ class TestDynamoTable:
     async def test_delete_item(self, dynamodb_table):
         """Test deleting item."""
         # Put item
-        user = TestUser(user_id="789", name="Delete Me", email="delete@example.com")
+        user = UserModel(user_id="789", name="Delete Me", email="delete@example.com")
         await dynamodb_table.put_item(user)
         
         # Delete item
@@ -68,7 +68,7 @@ class TestDynamoTable:
         """Test querying items."""
         # Put multiple items
         for i in range(5):
-            user = TestUser(
+            user = UserModel(
                 user_id=f"user{i}",
                 name=f"User {i}",
                 email=f"user{i}@example.com",
@@ -89,7 +89,7 @@ class TestDynamoTable:
         """Test scanning all items."""
         # Put multiple items
         for i in range(3):
-            user = TestUser(
+            user = UserModel(
                 user_id=f"scan{i}",
                 name=f"Scan {i}",
                 email=f"scan{i}@example.com"
@@ -106,7 +106,7 @@ class TestDynamoTable:
         """Test scanning with filter expression."""
         # Put items with different ages
         for i in range(5):
-            user = TestUser(
+            user = UserModel(
                 user_id=f"filter{i}",
                 name=f"Filter {i}",
                 email=f"filter{i}@example.com",
@@ -128,7 +128,7 @@ class TestDynamoTable:
     async def test_update_item(self, dynamodb_table):
         """Test updating item."""
         # Put item
-        user = TestUser(user_id="update1", name="Original", email="original@example.com")
+        user = UserModel(user_id="update1", name="Original", email="original@example.com")
         await dynamodb_table.put_item(user)
         
         # Update item
@@ -164,7 +164,7 @@ class TestDynamoTable:
         """Test batch getting items."""
         # Put multiple items
         for i in range(5):
-            user = TestUser(
+            user = UserModel(
                 user_id=f"batchget{i}",
                 name=f"BatchGet {i}",
                 email=f"batchget{i}@example.com"
@@ -181,7 +181,7 @@ class TestDynamoTable:
     async def test_serialization_deserialization(self, dynamodb_table):
         """Test serialization and deserialization of different types."""
         # Test with various data types
-        user = TestUser(
+        user = UserModel(
             user_id="serial1",
             name="Serialization Test",
             email="serial@example.com",

@@ -47,16 +47,17 @@ class TestBearerAuth:
         """Test different tokens."""
         auth1 = BearerAuth("token1")
         auth2 = BearerAuth("token2")
-        
+
         class MockRequest:
-            headers = {}
-        
+            def __init__(self):
+                self.headers = {}
+
         req1 = MockRequest()
         req2 = MockRequest()
-        
+
         result1 = auth1.auth_flow(req1)
         result2 = auth2.auth_flow(req2)
-        
+
         assert result1.headers["Authorization"] == "Bearer token1"
         assert result2.headers["Authorization"] == "Bearer token2"
 

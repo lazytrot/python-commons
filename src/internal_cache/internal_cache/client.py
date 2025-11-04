@@ -68,15 +68,22 @@ class RedisClient:
         if self._client:
             return
 
+        # Build connection kwargs, only include ssl if True
+        connection_kwargs = {
+            "password": self.config.password,
+            "username": self.config.username,
+            "socket_timeout": self.config.socket_timeout,
+            "socket_connect_timeout": self.config.socket_connect_timeout,
+            "max_connections": self.config.max_connections,
+            "decode_responses": self.config.decode_responses,
+        }
+
+        if self.config.ssl:
+            connection_kwargs["ssl"] = True
+
         self._client = await redis.from_url(
             f"redis://{self.config.host}:{self.config.port}/{self.config.db}",
-            password=self.config.password,
-            username=self.config.username,
-            ssl=self.config.ssl,
-            socket_timeout=self.config.socket_timeout,
-            socket_connect_timeout=self.config.socket_connect_timeout,
-            max_connections=self.config.max_connections,
-            decode_responses=self.config.decode_responses,
+            **connection_kwargs
         )
 
         logger.info(f"Connected to Redis at {self.config.host}:{self.config.port}")

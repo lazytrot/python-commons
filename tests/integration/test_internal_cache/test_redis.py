@@ -9,8 +9,12 @@ from internal_cache import RedisClient, RedisConfig, DistributedLock, cached
 @pytest.fixture(scope="module")
 def redis_container():
     """Start Redis container for integration tests."""
-    with RedisContainer("redis:7-alpine") as redis:
-        yield redis
+    redis = RedisContainer("redis:7-alpine")
+    redis.start()
+
+    yield redis
+
+    redis.stop()
 
 
 @pytest.fixture(scope="module")
@@ -20,6 +24,7 @@ def redis_config(redis_container):
         host=redis_container.get_container_host_ip(),
         port=int(redis_container.get_exposed_port(6379)),
         db=0,
+        ssl=False,
     )
 
 
@@ -32,7 +37,7 @@ async def redis_client(redis_config):
     yield client
 
     # Cleanup: flush database
-    await client.redis.flushdb()
+    await client.client.flushdb()
     await client.close()
 
 
@@ -58,7 +63,7 @@ async def test_redis_set_get(redis_client):
 @pytest.mark.asyncio
 async def test_redis_set_with_ttl(redis_client):
     """Test Redis set with TTL."""
-    await redis_client.set("test:ttl", "value", ex=2)
+    await redis_client.set("test:ttl", "value", ttl=2)
     value = await redis_client.get("test:ttl")
     assert value == "value"
 
@@ -86,10 +91,10 @@ async def test_redis_exists(redis_client):
     await redis_client.set("test:exists", "value")
 
     exists = await redis_client.exists("test:exists")
-    assert exists is True
+    assert exists == 1
 
     not_exists = await redis_client.exists("test:not_exists")
-    assert not_exists is False
+    assert not_exists == 0
 
 
 @pytest.mark.integration
@@ -98,10 +103,10 @@ async def test_redis_increment(redis_client):
     """Test Redis increment operation."""
     await redis_client.set("test:counter", "0")
 
-    value1 = await redis_client.incr("test:counter")
+    value1 = await redis_client.increment("test:counter")
     assert value1 == 1
 
-    value2 = await redis_client.incr("test:counter")
+    value2 = await redis_client.increment("test:counter")
     assert value2 == 2
 
 
@@ -110,15 +115,15 @@ async def test_redis_increment(redis_client):
 async def test_redis_hash_operations(redis_client):
     """Test Redis hash operations."""
     # Set hash field
-    await redis_client.hset("test:hash", "field1", "value1")
-    await redis_client.hset("test:hash", "field2", "value2")
+    await redis_client.client.hset("test:hash", "field1", "value1")
+    await redis_client.client.hset("test:hash", "field2", "value2")
 
     # Get hash field
-    value = await redis_client.hget("test:hash", "field1")
+    value = await redis_client.client.hget("test:hash", "field1")
     assert value == "value1"
 
     # Get all hash fields
-    all_fields = await redis_client.hgetall("test:hash")
+    all_fields = await redis_client.client.hgetall("test:hash")
     assert all_fields == {"field1": "value1", "field2": "value2"}
 
 
@@ -127,16 +132,16 @@ async def test_redis_hash_operations(redis_client):
 async def test_redis_list_operations(redis_client):
     """Test Redis list operations."""
     # Push to list
-    await redis_client.lpush("test:list", "item1")
-    await redis_client.lpush("test:list", "item2")
-    await redis_client.rpush("test:list", "item3")
+    await redis_client.client.lpush("test:list", "item1")
+    await redis_client.client.lpush("test:list", "item2")
+    await redis_client.client.rpush("test:list", "item3")
 
     # Get list length
-    length = await redis_client.llen("test:list")
+    length = await redis_client.client.llen("test:list")
     assert length == 3
 
     # Get list range
-    items = await redis_client.lrange("test:list", 0, -1)
+    items = await redis_client.client.lrange("test:list", 0, -1)
     assert items == ["item2", "item1", "item3"]
 
 
@@ -145,16 +150,16 @@ async def test_redis_list_operations(redis_client):
 async def test_redis_set_operations(redis_client):
     """Test Redis set operations."""
     # Add to set
-    await redis_client.sadd("test:set", "member1")
-    await redis_client.sadd("test:set", "member2")
-    await redis_client.sadd("test:set", "member3")
+    await redis_client.client.sadd("test:set", "member1")
+    await redis_client.client.sadd("test:set", "member2")
+    await redis_client.client.sadd("test:set", "member3")
 
     # Check membership
-    is_member = await redis_client.sismember("test:set", "member1")
-    assert is_member is True
+    is_member = await redis_client.client.sismember("test:set", "member1")
+    assert is_member == 1
 
     # Get all members
-    members = await redis_client.smembers("test:set")
+    members = await redis_client.client.smembers("test:set")
     assert len(members) == 3
     assert "member1" in members
 
@@ -164,24 +169,14 @@ async def test_redis_set_operations(redis_client):
 async def test_distributed_lock_acquire_release(redis_client):
     """Test distributed lock acquisition and release."""
     lock = DistributedLock(
-        redis_client=redis_client.redis,
-        key="test:lock",
+        client=redis_client,
+        lock_name="test:lock",
         timeout=10,
     )
 
     # Acquire lock
     acquired = await lock.acquire()
     assert acquired is True
-
-    # Try to acquire same lock (should fail or wait)
-    lock2 = DistributedLock(
-        redis_client=redis_client.redis,
-        key="test:lock",
-        timeout=10,
-        retry_delay=0.1,
-    )
-    # This should not acquire immediately
-    # (depends on implementation)
 
     # Release lock
     await lock.release()
@@ -192,8 +187,8 @@ async def test_distributed_lock_acquire_release(redis_client):
 async def test_distributed_lock_context_manager(redis_client):
     """Test distributed lock as context manager."""
     async with DistributedLock(
-        redis_client=redis_client.redis,
-        key="test:lock:ctx",
+        client=redis_client,
+        lock_name="test:lock:ctx",
         timeout=10,
     ) as acquired:
         assert acquired is True
@@ -201,11 +196,11 @@ async def test_distributed_lock_context_manager(redis_client):
         # Lock should be held
         # Try to check if key exists
         exists = await redis_client.exists("test:lock:ctx")
-        assert exists is True
+        assert exists > 0
 
     # Lock should be released after context
     exists_after = await redis_client.exists("test:lock:ctx")
-    assert exists_after is False
+    assert exists_after == 0
 
 
 @pytest.mark.integration
@@ -216,8 +211,8 @@ async def test_distributed_lock_concurrent_access(redis_client):
 
     async def increment_with_lock():
         async with DistributedLock(
-            redis_client=redis_client.redis,
-            key="test:lock:counter",
+            client=redis_client,
+            lock_name="test:lock:counter",
             timeout=5,
         ):
             # Simulate work
@@ -239,7 +234,7 @@ async def test_cached_decorator(redis_client):
     """Test cached decorator with real Redis."""
     call_count = 0
 
-    @cached(redis_client=redis_client.redis, ttl=10)
+    @cached(client=redis_client, ttl=10)
     async def expensive_function(arg: int):
         nonlocal call_count
         call_count += 1
@@ -266,7 +261,7 @@ async def test_cached_decorator(redis_client):
 @pytest.mark.asyncio
 async def test_redis_pipeline(redis_client):
     """Test Redis pipeline for batch operations."""
-    pipe = redis_client.redis.pipeline()
+    pipe = redis_client.client.pipeline()
     pipe.set("pipe:key1", "value1")
     pipe.set("pipe:key2", "value2")
     pipe.get("pipe:key1")
@@ -282,11 +277,11 @@ async def test_redis_pipeline(redis_client):
 @pytest.mark.asyncio
 async def test_redis_pubsub(redis_client):
     """Test Redis pub/sub functionality."""
-    pubsub = redis_client.redis.pubsub()
+    pubsub = redis_client.client.pubsub()
     await pubsub.subscribe("test:channel")
 
     # Publish message
-    await redis_client.publish("test:channel", "test message")
+    await redis_client.client.publish("test:channel", "test message")
 
     # Wait briefly for message
     await asyncio.sleep(0.1)
@@ -306,11 +301,12 @@ async def test_redis_pubsub(redis_client):
 async def test_redis_multiple_databases(redis_config):
     """Test Redis with multiple databases."""
     # Connect to db 0
-    client0 = RedisClient(RedisConfig(**{**redis_config.model_dump(), "db": 0}))
+    from dataclasses import asdict
+    client0 = RedisClient(RedisConfig(**{**asdict(redis_config), "db": 0}))
     await client0.connect()
 
     # Connect to db 1
-    client1 = RedisClient(RedisConfig(**{**redis_config.model_dump(), "db": 1}))
+    client1 = RedisClient(RedisConfig(**{**asdict(redis_config), "db": 1}))
     await client1.connect()
 
     # Set value in db 0

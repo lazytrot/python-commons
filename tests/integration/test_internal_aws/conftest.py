@@ -3,6 +3,7 @@
 import pytest
 import pytest_asyncio
 from testcontainers.localstack import LocalStackContainer
+from testcontainers.core.waiting_utils import wait_for_logs
 
 from internal_aws import (
     S3Client, S3ClientConfig,
@@ -15,9 +16,16 @@ from internal_aws import (
 @pytest.fixture(scope="session")
 def localstack_container():
     """Start LocalStack container for AWS services."""
-    with LocalStackContainer(image="localstack/localstack:latest") as localstack:
-        localstack.with_services("s3", "dynamodb", "sqs")
-        yield localstack
+    localstack = LocalStackContainer(image="localstack/localstack:latest")
+    localstack.with_services("s3", "dynamodb", "sqs")
+    localstack.start()
+
+    # Wait for LocalStack to be ready
+    wait_for_logs(localstack, "Ready", timeout=60)
+
+    yield localstack
+
+    localstack.stop()
 
 
 @pytest.fixture

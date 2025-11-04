@@ -6,7 +6,7 @@ Uses MockServer for real HTTP testing - NO MOCKING.
 
 import pytest
 import httpx
-from internal_http import HttpClient, HttpClientConfig, RetryConfig, BearerAuth
+from internal_http import HttpClient, RetryConfig, BearerAuth, AuthConfig
 
 
 @pytest.mark.integration
@@ -34,12 +34,11 @@ class TestHttpClientIntegration:
 
     async def test_retry_on_failure(self, mockserver_url):
         """Test retry logic on failure."""
-        config = HttpClientConfig(
+        client = HttpClient(
             base_url=mockserver_url,
             retries=RetryConfig(max_attempts=3, backoff_factor=0.1)
         )
-        client = HttpClient(config)
-        
+
         async with client:
             # Even if endpoint doesn't exist, client handles it
             try:
