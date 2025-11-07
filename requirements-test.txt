@@ -18,6 +18,7 @@ aiosqlite>=0.20.0  # SQLite
 
 # HTTP testing
 httpx>=0.28.0
+mockserver-client>=5.15.0  # MockServer for HTTP mocking
 
 # AWS testing
 aioboto3>=13.0.0

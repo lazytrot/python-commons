@@ -120,6 +120,10 @@ class HttpClient:
 
     async def __aexit__(self, exc_type, exc_val, exc_tb):
         """Context manager exit."""
+        await self.close()
+
+    async def close(self):
+        """Close the HTTP client and clean up resources."""
         if self._client:
             await self._client.aclose()
             self._client = None
