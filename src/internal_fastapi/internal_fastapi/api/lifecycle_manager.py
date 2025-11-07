@@ -11,29 +11,7 @@ from typing import List, Callable, Awaitable, Optional, AsyncIterator
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
-
-try:
-    from internal_base import BackgroundServiceProtocol, ServiceState
-except ImportError:
-    # Fallback if internal_base not available
-    from enum import Enum
-    from typing import Protocol, runtime_checkable
-
-    class ServiceState(str, Enum):
-        IDLE = "idle"
-        STARTING = "starting"
-        RUNNING = "running"
-        STOPPING = "stopping"
-        STOPPED = "stopped"
-        FAILED = "failed"
-
-    @runtime_checkable
-    class BackgroundServiceProtocol(Protocol):
-        @property
-        def state(self) -> ServiceState: ...
-        async def start(self) -> None: ...
-        async def stop(self) -> None: ...
-        async def is_healthy(self) -> bool: ...
+from internal_base import BackgroundServiceProtocol, ServiceState
 
 
 logger = logging.getLogger(__name__)
@@ -291,11 +269,14 @@ class LifecycleManager:
         async def _lifespan(app: FastAPI) -> AsyncIterator[None]:
             # Setup signal handlers
             loop = asyncio.get_event_loop()
+            registered_signals = []
+
             for sig in (signal.SIGTERM, signal.SIGINT):
                 loop.add_signal_handler(
                     sig,
                     lambda s=sig: asyncio.create_task(self._handle_shutdown(s))
                 )
+                registered_signals.append(sig)
 
             # Start services
             await self.start()
@@ -303,6 +284,14 @@ class LifecycleManager:
             try:
                 yield
             finally:
+                # Remove signal handlers
+                for sig in registered_signals:
+                    try:
+                        loop.remove_signal_handler(sig)
+                    except (ValueError, RuntimeError):
+                        # Signal handler might already be removed or loop closed
+                        pass
+
                 # Stop services
                 await self.stop()
 

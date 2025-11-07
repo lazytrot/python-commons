@@ -122,7 +122,7 @@ class TestSQLiteMemDatabase:
         async with sqlite_db.session() as session:
             user = User(name="Charlie", email="charlie@example.com")
             session.add(user)
-        
+
         async with sqlite_db.session() as session:
             result = await session.execute(select(User).where(User.name == "Charlie"))
             found_user = result.scalar_one()
@@ -138,9 +138,73 @@ class TestSQLiteMemDatabase:
             ]
             for user in users:
                 session.add(user)
-        
+
         # Query all
         async with sqlite_db.session() as session:
             result = await session.execute(select(User))
             all_users = result.scalars().all()
             assert len(all_users) == 10
+
+
+@pytest.mark.unit
+@pytest.mark.asyncio
+class TestSQLiteFileDatabase:
+    """Test SQLite file-based database."""
+
+    async def test_sqlite_file_with_connect_args(self):
+        """Test SQLite file database with custom connect_args."""
+        from internal_rdbms import SQLiteDatabase, DatabaseConfig
+        import tempfile
+        import os
+
+        # Create temp database file
+        with tempfile.NamedTemporaryFile(delete=False, suffix=".db") as f:
+            db_path = f.name
+
+        try:
+            # Test with custom connect_args
+            config = DatabaseConfig(
+                driver="sqlite+aiosqlite",
+                name=db_path,
+                echo=False,
+                connect_args={"check_same_thread": False, "timeout": 10}
+            )
+            db = SQLiteDatabase(config)
+
+            # Verify engine was created
+            assert db._engine is not None
+            assert "check_same_thread" in db.settings.connect_args
+            assert db.settings.connect_args["check_same_thread"] is False
+
+            await db.dispose()
+        finally:
+            # Cleanup
+            if os.path.exists(db_path):
+                os.unlink(db_path)
+
+    async def test_sqlite_file_default_connect_args(self):
+        """Test SQLite sets default check_same_thread."""
+        from internal_rdbms import SQLiteDatabase, DatabaseConfig
+        import tempfile
+        import os
+
+        with tempfile.NamedTemporaryFile(delete=False, suffix=".db") as f:
+            db_path = f.name
+
+        try:
+            # Test without connect_args - should set default
+            config = DatabaseConfig(
+                driver="sqlite+aiosqlite",
+                name=db_path,
+                echo=False
+            )
+            db = SQLiteDatabase(config)
+
+            # Should have added check_same_thread=False by default
+            assert "check_same_thread" in db.settings.connect_args
+            assert db.settings.connect_args["check_same_thread"] is False
+
+            await db.dispose()
+        finally:
+            if os.path.exists(db_path):
+                os.unlink(db_path)

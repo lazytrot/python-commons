@@ -4,6 +4,7 @@ import pytest
 import asyncio
 from testcontainers.redis import RedisContainer
 from internal_cache import RedisClient, RedisConfig, DistributedLock, cached
+from tests.test_utils import wait_for_ttl_expiry, wait_for_condition
 
 
 @pytest.fixture(scope="module")
@@ -67,8 +68,8 @@ async def test_redis_set_with_ttl(redis_client):
     value = await redis_client.get("test:ttl")
     assert value == "value"
 
-    # Wait for expiration
-    await asyncio.sleep(3)
+    # Wait for TTL expiration (condition-based, much faster than sleep)
+    await wait_for_ttl_expiry(redis_client, "test:ttl", timeout_ms=3000)
     expired_value = await redis_client.get("test:ttl")
     assert expired_value is None
 
@@ -283,15 +284,20 @@ async def test_redis_pubsub(redis_client):
     # Publish message
     await redis_client.client.publish("test:channel", "test message")
 
-    # Wait briefly for message
-    await asyncio.sleep(0.1)
+    # Wait for message to be available (condition-based)
+    async def get_message():
+        msg = await pubsub.get_message(ignore_subscribe_messages=True, timeout=0.1)
+        return msg if msg and msg["type"] == "message" else None
 
-    # Try to get message
-    message = await pubsub.get_message(ignore_subscribe_messages=True, timeout=1)
+    message = await wait_for_condition(
+        get_message,
+        "pub/sub message to be received",
+        timeout_ms=2000
+    )
 
-    if message:
-        assert message["type"] == "message"
-        assert message["data"] == "test message"
+    assert message is not None
+    assert message["type"] == "message"
+    assert message["data"] == "test message"
 
     await pubsub.unsubscribe("test:channel")
 

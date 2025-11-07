@@ -7,6 +7,7 @@ Tests real SQS operations - NO MOCKING.
 import pytest
 import asyncio
 from pydantic import BaseModel
+from tests.test_utils import wait_for_condition
 
 
 class MessageModel(BaseModel):
@@ -116,25 +117,22 @@ class TestSQSClient:
         # Send messages
         for i in range(5):
             await sqs_client.send_message(f"Message {i}")
-        
-        # Wait a bit for messages to be available
-        await asyncio.sleep(1)
-        
+
         # Track processed messages
         processed = []
-        
+
         async def handler(message):
             """Test handler."""
             processed.append(message["Body"])
-        
-        # Process messages
+
+        # Process messages (SQS has built-in long polling via wait_time_seconds)
         results = await sqs_client.process_messages(
             handler=handler,
             max_number_of_messages=10,
             wait_time_seconds=2,
             auto_delete=True
         )
-        
+
         # Should have processed some messages
         assert len(processed) >= 1
         assert len(results) >= 1
@@ -173,10 +171,7 @@ class TestSQSConsumer:
         client = SQSClient(sqs_config, aws_credentials)
         for i in range(3):
             await client.send_message(f"Consumer test {i}")
-        
-        # Wait for messages
-        await asyncio.sleep(1)
-        
+
         # Track processed messages
         processed = []
         
@@ -205,13 +200,18 @@ class TestSQSConsumer:
 
     async def test_consumer_start_stop(self, sqs_config, aws_credentials):
         """Test consumer start and stop."""
-        from internal_aws import SQSConsumer
-        
+        from internal_aws import SQSConsumer, SQSClient
+
+        # Send test messages first
+        client = SQSClient(sqs_config, aws_credentials)
+        for i in range(3):
+            await client.send_message(f"Test message {i}")
+
         processed = []
-        
+
         async def handler(message):
             processed.append(message["Body"])
-        
+
         consumer = SQSConsumer(
             queue_url=sqs_config.queue_url,
             region=sqs_config.region,
@@ -221,13 +221,17 @@ class TestSQSConsumer:
             wait_time=1,
             polling_interval=0.1
         )
-        
+
         # Start consumer in background
         task = asyncio.create_task(consumer.start())
-        
-        # Let it run briefly
-        await asyncio.sleep(2)
-        
+
+        # Wait for consumer to process messages (condition-based)
+        await wait_for_condition(
+            lambda: len(processed) > 0,
+            "consumer to process messages",
+            timeout_ms=5000
+        )
+
         # Stop consumer
         await consumer.stop()
         

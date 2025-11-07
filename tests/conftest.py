@@ -11,8 +11,7 @@ import pytest_asyncio
 try:
     from testcontainers.postgres import PostgresContainer
     from testcontainers.redis import RedisContainer
-    from sqlalchemy.ext.asyncio import AsyncSession
-    from internal_rdbms import DatabaseConfig, DatabaseDriver, DatabaseSessionManager, Base
+    from internal_rdbms import DatabaseConfig
     from internal_cache import RedisClient, RedisConfig
     HAS_INTEGRATION_DEPS = True
 except ImportError:
@@ -34,7 +33,7 @@ if HAS_INTEGRATION_DEPS:
     def postgres_config(postgres_container):
         """Create PostgreSQL configuration from test container."""
         return DatabaseConfig(
-            driver=DatabaseDriver.POSTGRESQL,
+            driver="postgresql+asyncpg",
             host=postgres_container.get_container_host_ip(),
             port=int(postgres_container.get_exposed_port(5432)),
             user=postgres_container.username,
@@ -44,28 +43,8 @@ if HAS_INTEGRATION_DEPS:
         )
 
 
-    @pytest_asyncio.fixture
-    async def db_session(postgres_config):
-        """
-        Provide database session with automatic table creation/cleanup.
-
-        Uses real PostgreSQL from testcontainers.
-        """
-        db_manager = DatabaseSessionManager(postgres_config)
-
-        # Create all tables
-        async with db_manager.engine.begin() as conn:
-            await conn.run_sync(Base.metadata.create_all)
-
-        # Provide session
-        async with db_manager() as session:
-            yield session
-
-        # Cleanup
-        async with db_manager.engine.begin() as conn:
-            await conn.run_sync(Base.metadata.drop_all)
-
-        await db_manager.close()
+    # db_session fixture removed - individual test modules should create their own
+    # database instances with their specific models
 
 
     # Redis fixtures
@@ -106,26 +85,5 @@ if HAS_INTEGRATION_DEPS:
 
     # SQLite in-memory fixtures (for fast unit tests)
 
-    @pytest.fixture
-    def sqlite_memory_config():
-        """SQLite in-memory config for fast unit tests."""
-        return DatabaseConfig(
-            driver=DatabaseDriver.SQLITE_MEMORY,
-            echo=True,
-        )
-
-
-    @pytest_asyncio.fixture
-    async def sqlite_session(sqlite_memory_config):
-        """Fast in-memory database session for unit tests."""
-        db_manager = DatabaseSessionManager(sqlite_memory_config)
-
-        # Create all tables
-        async with db_manager.engine.begin() as conn:
-            await conn.run_sync(Base.metadata.create_all)
-
-        # Provide session
-        async with db_manager() as session:
-            yield session
-
-        await db_manager.close()
+    # SQLite fixtures removed - individual test modules should create their own
+    # database instances with their specific models
