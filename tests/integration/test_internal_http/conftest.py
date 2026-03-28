@@ -1,12 +1,14 @@
 """Fixtures for internal_http integration tests."""
 
-import pytest
 import time
+
+import httpx
+import pytest
 import requests
 from testcontainers.core.container import DockerContainer
 from mockserver import MockServerClient
 
-from internal_http import HttpClient, RetryConfig
+from internal_http import HttpClient
 
 
 @pytest.fixture(scope="session")
@@ -62,6 +64,7 @@ def mockserver_client(mock_server_url):
 @pytest.fixture
 async def http_client(mock_server_url):
     """Create HTTP client pointing to MockServer."""
-    client = HttpClient(base_url=mock_server_url)
+    async_client = httpx.AsyncClient(base_url=mock_server_url)
+    client = HttpClient(client=async_client)
     async with client:
         yield client

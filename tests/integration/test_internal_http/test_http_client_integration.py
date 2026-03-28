@@ -5,6 +5,7 @@ Tests against MockServer container - NO MOCKING of client code, real HTTP infras
 Uses testcontainers for real HTTP testing with controlled responses.
 """
 
+import httpx
 import pytest
 from mockserver import MockServerClient, request as mock_request, response as mock_response, times
 
@@ -16,6 +17,24 @@ class User(BaseModel):
     """Test model for JSON responses."""
     name: str
     age: int
+
+
+def build_http_client(
+    *,
+    base_url: str,
+    timeout: float | httpx.Timeout = 10.0,
+    retries: int | RetryConfig | None = None,
+    auth_config: AuthConfig | None = None,
+    default_headers: dict[str, str] | None = None,
+) -> HttpClient:
+    """Create a strict-DI HttpClient for integration tests."""
+    async_client = httpx.AsyncClient(base_url=base_url, timeout=timeout)
+    return HttpClient(
+        client=async_client,
+        retries=retries,
+        auth_config=auth_config,
+        default_headers=default_headers,
+    )
 
 
 @pytest.mark.integration
@@ -32,7 +51,7 @@ class TestHttpClientBasicOperations:
             times(1)
         )
 
-        async with HttpClient(base_url=mock_server_url) as client:
+        async with build_http_client(base_url=mock_server_url) as client:
             response = await client.get("/get")
 
             assert response.status_code == 200
@@ -49,7 +68,7 @@ class TestHttpClientBasicOperations:
             times(1)
         )
 
-        async with HttpClient(base_url=mock_server_url) as client:
+        async with build_http_client(base_url=mock_server_url) as client:
             response = await client.get("/get", params={"foo": "bar", "test": "123"})
 
             data = response.json()
@@ -66,7 +85,7 @@ class TestHttpClientBasicOperations:
             times(1)
         )
 
-        async with HttpClient(base_url=mock_server_url) as client:
+        async with build_http_client(base_url=mock_server_url) as client:
             response = await client.post("/post", json=payload)
 
             assert response.status_code == 200
@@ -83,7 +102,7 @@ class TestHttpClientBasicOperations:
             times(1)
         )
 
-        async with HttpClient(base_url=mock_server_url) as client:
+        async with build_http_client(base_url=mock_server_url) as client:
             response = await client.post("/post", data=form_data)
 
             assert response.status_code == 200
@@ -100,7 +119,7 @@ class TestHttpClientBasicOperations:
             times(1)
         )
 
-        async with HttpClient(base_url=mock_server_url) as client:
+        async with build_http_client(base_url=mock_server_url) as client:
             response = await client.put("/put", json=payload)
 
             assert response.status_code == 200
@@ -117,7 +136,7 @@ class TestHttpClientBasicOperations:
             times(1)
         )
 
-        async with HttpClient(base_url=mock_server_url) as client:
+        async with build_http_client(base_url=mock_server_url) as client:
             response = await client.patch("/patch", json=payload)
 
             assert response.status_code == 200
@@ -132,7 +151,7 @@ class TestHttpClientBasicOperations:
             times(1)
         )
 
-        async with HttpClient(base_url=mock_server_url) as client:
+        async with build_http_client(base_url=mock_server_url) as client:
             response = await client.delete("/delete")
 
             assert response.status_code == 200
@@ -152,7 +171,10 @@ class TestHttpClientHeaders:
         )
 
         default_headers = {"X-Custom-Header": "test-value"}
-        async with HttpClient(base_url=mock_server_url, default_headers=default_headers) as client:
+        async with build_http_client(
+            base_url=mock_server_url,
+            default_headers=default_headers,
+        ) as client:
             response = await client.get("/headers")
 
             data = response.json()
@@ -166,7 +188,7 @@ class TestHttpClientHeaders:
             times(1)
         )
 
-        async with HttpClient(base_url=mock_server_url) as client:
+        async with build_http_client(base_url=mock_server_url) as client:
             headers = {"X-Request-Header": "request-value"}
             response = await client.get("/headers", headers=headers)
 
@@ -188,7 +210,7 @@ class TestHttpClientAuth:
         )
 
         auth_config = AuthConfig(auth=BearerAuth("test-token-123"))
-        async with HttpClient(base_url=mock_server_url, auth_config=auth_config) as client:
+        async with build_http_client(base_url=mock_server_url, auth_config=auth_config) as client:
             response = await client.get("/bearer")
 
             assert response.status_code == 200
@@ -205,7 +227,7 @@ class TestHttpClientAuth:
         )
 
         auth_config = AuthConfig(auth=BasicAuth("user", "pass"))
-        async with HttpClient(base_url=mock_server_url, auth_config=auth_config) as client:
+        async with build_http_client(base_url=mock_server_url, auth_config=auth_config) as client:
             response = await client.get("/basic-auth")
 
             assert response.status_code == 200
@@ -228,7 +250,7 @@ class TestHttpClientRetry:
         )
 
         retry_config = RetryConfig(max_attempts=3, backoff_factor=0.1)
-        client = HttpClient(base_url=mock_server_url, retries=retry_config)
+        client = build_http_client(base_url=mock_server_url, retries=retry_config)
 
         # Should retry and return 500 response after exhausting retries
         response = await client.get("/status/500")
@@ -246,7 +268,7 @@ class TestHttpClientRetry:
         )
 
         retry_config = RetryConfig(max_attempts=3)
-        client = HttpClient(base_url=mock_server_url, retries=retry_config)
+        client = build_http_client(base_url=mock_server_url, retries=retry_config)
 
         # Should return 404 response without retries
         response = await client.get("/status/404")
@@ -268,7 +290,7 @@ class TestHttpClientModels:
             times(1)
         )
 
-        async with HttpClient(base_url=mock_server_url) as client:
+        async with build_http_client(base_url=mock_server_url) as client:
             response = await client.post("/anything", json={"name": "Alice", "age": 30})
 
             # Manually parse to test concept
@@ -288,7 +310,7 @@ class TestHttpClientModels:
             times(1)
         )
 
-        async with HttpClient(base_url=mock_server_url) as client:
+        async with build_http_client(base_url=mock_server_url) as client:
             response = await client.post("/post", json=user.model_dump())
 
             data = response.json()
@@ -303,7 +325,7 @@ class TestHttpClientErrorHandling:
 
     async def test_connection_error(self):
         """Test connection error handling."""
-        client = HttpClient(base_url="http://localhost:1", timeout=1.0)
+        client = build_http_client(base_url="http://localhost:1", timeout=1.0)
 
         with pytest.raises(HttpClientError):
             await client.get("/test")
@@ -320,7 +342,7 @@ class TestHttpClientErrorHandling:
         )
 
         # Use a short timeout to ensure it times out
-        async with HttpClient(base_url=mock_server_url, timeout=0.5) as client:
+        async with build_http_client(base_url=mock_server_url, timeout=0.5) as client:
             with pytest.raises(HttpClientError):
                 await client.get("/delay")
 
@@ -338,7 +360,7 @@ class TestHttpClientContextManager:
             times(1)
         )
 
-        async with HttpClient(base_url=mock_server_url) as client:
+        async with build_http_client(base_url=mock_server_url) as client:
             response = await client.get("/get")
             assert response.status_code == 200
             # Client should be open
@@ -355,7 +377,7 @@ class TestHttpClientContextManager:
             times(1)
         )
 
-        client = HttpClient(base_url=mock_server_url)
+        client = build_http_client(base_url=mock_server_url)
         response = await client.get("/get")
         assert response.status_code == 200
 

@@ -1,17 +1,20 @@
 """
 HTTP client with retry and auth support.
 
-Provides async HTTP client with authentication, retry logic, and Pydantic model support.
+Provides an async HTTP client with authentication, retry logic, Pydantic model support,
+and application lifecycle management.
 """
 
 import asyncio
 import logging
 import random
-from typing import Optional, Dict, Any, Union, Type, TypeVar
+from typing import Any, Dict, Optional, Type, TypeVar, Union
+
 import httpx
+from internal_base import AsyncService, ServiceState
 from pydantic import BaseModel
 
-from ..models.config import RetryConfig, AuthConfig
+from ..models.config import AuthConfig, RetryConfig
 
 
 logger = logging.getLogger(__name__)
@@ -41,7 +44,7 @@ class HttpClientError(Exception):
         self.response = response
 
 
-class HttpClient:
+class HttpClient(AsyncService):
     """
     Async HTTP client with retry and auth support.
 
@@ -49,16 +52,15 @@ class HttpClient:
         from internal_http import HttpClient, BearerAuth, AuthConfig, RetryConfig
 
         # Simple usage
-        async with HttpClient(base_url="https://api.example.com") as client:
+        async_client = httpx.AsyncClient(base_url="https://api.example.com")
+        async with HttpClient(client=async_client) as client:
             response = await client.get("/users")
             print(response.json())
 
         # With authentication
         auth_config = AuthConfig(auth=BearerAuth("token"))
-        client = HttpClient(
-            base_url="https://api.example.com",
-            auth_config=auth_config
-        )
+        async_client = httpx.AsyncClient(base_url="https://api.example.com")
+        client = HttpClient(client=async_client, auth_config=auth_config)
         await client.get("/protected")
 
         # With retries and Pydantic models
@@ -74,32 +76,26 @@ class HttpClient:
 
     def __init__(
         self,
-        base_url: str = "",
-        timeout: Union[float, httpx.Timeout] = 10.0,
+        client: httpx.AsyncClient,
         retries: Optional[Union[int, RetryConfig]] = None,
         auth_config: Optional[AuthConfig] = None,
         default_headers: Optional[Dict[str, str]] = None,
-        verify_ssl: bool = True,
-        follow_redirects: bool = True,
+        name: Optional[str] = None,
     ):
         """
         Initialize HTTP client.
 
         Args:
-            base_url: Base URL for all requests
-            timeout: Request timeout (seconds or httpx.Timeout)
+            client: Injected AsyncClient instance managed through this service lifecycle
             retries: Retry configuration (int for simple retry count, or RetryConfig)
             auth_config: Authentication configuration
             default_headers: Default headers for all requests
-            verify_ssl: Verify SSL certificates
-            follow_redirects: Follow HTTP redirects
+            name: Optional lifecycle service name
         """
-        self.base_url = base_url
-        self.timeout = timeout if isinstance(timeout, httpx.Timeout) else httpx.Timeout(timeout)
+        super().__init__(name=name)
+        self._client = client
         self.auth_config = auth_config or AuthConfig()
         self.default_headers = default_headers or {}
-        self.verify_ssl = verify_ssl
-        self.follow_redirects = follow_redirects
 
         # Setup retry config
         if isinstance(retries, int):
@@ -111,32 +107,37 @@ class HttpClient:
         else:
             self.retry_config = RetryConfig()
 
-        self._client: Optional[httpx.AsyncClient] = None
+    async def _start(self) -> None:
+        """Start the HTTP client service."""
+        if self._client.is_closed:
+            raise RuntimeError("Injected HTTP client is already closed")
 
-    async def __aenter__(self):
-        """Context manager entry."""
-        await self._ensure_client()
-        return self
-
-    async def __aexit__(self, exc_type, exc_val, exc_tb):
-        """Context manager exit."""
-        await self.close()
-
-    async def close(self):
-        """Close the HTTP client and clean up resources."""
-        if self._client:
+    async def _stop(self) -> None:
+        """Stop the HTTP client service and release resources."""
+        if not self._client.is_closed:
             await self._client.aclose()
-            self._client = None
+
+    async def _health_check(self) -> bool:
+        """Check whether the underlying client is available."""
+        return not self._client.is_closed
+
+    async def close(self) -> None:
+        """Close the HTTP client and clean up resources."""
+        if self.state in (ServiceState.IDLE, ServiceState.STOPPED):
+            if not self._client.is_closed:
+                await self._client.aclose()
+            return
+
+        await self.stop()
 
     async def _ensure_client(self) -> httpx.AsyncClient:
-        """Ensure client is created."""
-        if self._client is None:
-            self._client = httpx.AsyncClient(
-                base_url=self.base_url,
-                timeout=self.timeout,
-                verify=self.verify_ssl,
-                follow_redirects=self.follow_redirects,
-            )
+        """Ensure a managed or injected client is available."""
+        if self.state != ServiceState.RUNNING:
+            await self.start()
+
+        if self._client.is_closed:
+            raise RuntimeError("Injected HTTP client is already closed")
+
         return self._client
 
     @property
@@ -144,7 +145,7 @@ class HttpClient:
         """Get or create HTTP client."""
         return await self._ensure_client()
 
-    def _should_retry(self, response: httpx.Response) -> bool:
+    def _should_retry(self, method: str, response: httpx.Response) -> bool:
         """
         Check if request should be retried based on response.
 
@@ -154,7 +155,10 @@ class HttpClient:
         Returns:
             True if should retry
         """
-        return response.status_code in self.retry_config.retry_statuses
+        return (
+            method.upper() in self.retry_config.retry_methods
+            and response.status_code in self.retry_config.retry_statuses
+        )
 
     def _prepare_request(
         self,
@@ -227,7 +231,7 @@ class HttpClient:
                 response = await client.request(**request_params)
 
                 # Check if we should retry based on status code
-                if self._should_retry(response) and attempt < self.retry_config.max_attempts - 1:
+                if self._should_retry(method, response) and attempt < self.retry_config.max_attempts - 1:
                     # Calculate backoff with jitter
                     wait_time = backoff * (2 ** attempt)
                     if self.retry_config.jitter:

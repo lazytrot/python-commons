@@ -45,10 +45,8 @@ class BearerAuth(AuthBase):
             from internal_http import HttpClient, BearerAuth
 
             auth = BearerAuth("your-api-token")
-            client = HttpClient(
-                base_url="https://api.example.com",
-                auth_config=AuthConfig(auth=auth)
-            )
+            async_client = httpx.AsyncClient(base_url="https://api.example.com")
+            client = HttpClient(client=async_client, auth_config=AuthConfig(auth=auth))
 
             response = await client.get("/protected")
         """
@@ -75,10 +73,8 @@ class BasicAuth(AuthBase):
             from internal_http import HttpClient, BasicAuth
 
             auth = BasicAuth("user", "pass")
-            client = HttpClient(
-                base_url="https://api.example.com",
-                auth_config=AuthConfig(auth=auth)
-            )
+            async_client = httpx.AsyncClient(base_url="https://api.example.com")
+            client = HttpClient(client=async_client, auth_config=AuthConfig(auth=auth))
         """
         self.username = username
         self.password = password
